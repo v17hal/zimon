@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+
+# Database (user data — not committed)
+*.db
+*.sqlite
+*.sqlite3
+.zimon/
+
+# PyInstaller build output
+dist/
+build/
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+recordings/
+analysis_output/
+
+# ZebraZoom outputs
+ZZoutput/
+results/
+
+# Project specific
+*.h5
+*.avi.backup
+temp/
+tmp/
+secrets.py
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+
+
+

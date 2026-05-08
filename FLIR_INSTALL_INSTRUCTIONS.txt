@@ -1,0 +1,52 @@
+FLIR SPINNAKER SDK INSTALLATION GUIDE
+
+PROBLEM: FLIR camera not detected in ZIMON application
+SOLUTION: Install FLIR Spinnaker SDK with Python bindings
+
+STEP 1: DOWNLOAD FLIR SPINNAKER SDK
+- Go to: https://www.flir.com/support-center/downloads/spinnaker/
+- Select: Windows 64-bit
+- Download: Latest Spinnaker SDK (version 1.26.0 or later)
+
+STEP 2: INSTALL WITH PYTHON BINDINGS (CRITICAL)
+1. Right-click installer and "Run as administrator"
+2. Select "Custom" installation (NOT "Typical")
+3. IMPORTANT: Check "Python Bindings" option
+4. Ensure installation includes Python components
+5. Complete installation
+
+STEP 3: VERIFY INSTALLATION
+Open Command Prompt and run:
+python -c "import PySpin; print('PySpin version:', PySpin.__version__)"
+
+Should output: PySpin version: [version number]
+
+STEP 4: TEST WITH ZIMON
+1. Launch ZIMON application
+2. Check camera dropdown
+3. FLIR camera should appear as "FLIR_[Model]_[Serial]"
+
+TROUBLESHOOTING:
+If PySpin import fails:
+1. Check FLIR installation path:
+   C:\Program Files\FLIR Systems\Spinnaker\Development\bin\Python
+2. Add this path to system PATH environment variable
+3. Restart Command Prompt and test again
+
+ALTERNATIVE LOCATIONS:
+- C:\Program Files (x86)\FLIR Systems\Spinnaker\Development\bin\Python
+- Check both Program Files folders
+
+REQUIREMENTS:
+- Windows 10/11 64-bit
+- Administrator privileges for installation
+- USB3 connection for FLIR camera
+- Python 3.8+ (already installed)
+
+SUPPORT:
+- FLIR Documentation: https://www.flir.com/support/
+- Spinnaker SDK Guide: Included with installation
+- Ensure camera model supports Spinnaker SDK
+
+NOTE: FLIR SpinView working does NOT mean Python bindings are installed.
+SpinView is a standalone application, but ZIMON needs PySpin Python bindings.
