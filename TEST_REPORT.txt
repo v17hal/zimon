@@ -1,0 +1,151 @@
+ZIMON AUTOMATED TEST REPORT
+Generated: 2026-05-11 14:16:05
+==============================================================
+
+Total: 138  |  Passed: 138  |  Failed: 0
+Pass rate: 100.0%
+
+==============================================================
+[PASS] Import Database layer
+[PASS] Import Arduino controller
+[PASS] Import Camera manager
+[PASS] Import Mode profiles
+[PASS] Import Recording manager
+[PASS] Import Frame relay
+[PASS] Import Login window
+[PASS] Import Nav bar
+[PASS] Import Bottom bar
+[PASS] Import Environment page
+[PASS] Import Protocol Builder page
+[PASS] Import Experiments page
+[PASS] Import Adult page
+[PASS] Import Larval page
+[PASS] Import Settings page
+[PASS] Import User management
+[PASS] DB: init_db() creates tables
+[PASS] DB: admin seeded on first run
+[PASS] DB: create_user(researcher)
+[PASS] DB: login() succeeds with correct credentials
+[PASS] DB: login() fails with wrong password
+[PASS] DB: update_user() changes role
+[PASS] DB: delete_user() deactivates
+[PASS] DB: save_protocol() with category
+       protocol_id=1
+[PASS] DB: list_protocols() returns saved protocol
+[PASS] DB: list_protocols(category='larval') filters correctly
+[PASS] DB: list_protocols(category='adult') excludes larval-only
+[PASS] DB: get_protocol() returns correct data
+[PASS] DB: delete_protocol()
+[PASS] DB: save_camera_assignment()
+[PASS] DB: get_camera_assignments() returns saved assignment
+[PASS] DB: get_camera_for_role() returns correct camera
+[PASS] DB: get_camera_for_role() returns None for unassigned role
+[PASS] DB: create_experiment() returns exp_id
+[PASS] DB: finish_experiment() with events log
+[PASS] DB: list_experiments() returns finished experiment
+[PASS] DB: events_log stored and retrieved correctly
+[PASS] Arduino: is_connected() = False when no port
+[PASS] Arduino: write_command() returns False when disconnected
+[PASS] Arduino: set_ir_intensity(50) runs without exception
+[PASS] Arduino: set_white_intensity(80) runs without exception
+[PASS] Arduino: set_heater(75) runs without exception
+[PASS] Arduino: heater_on() runs without exception
+[PASS] Arduino: heater_off() runs without exception
+[PASS] Arduino: vibrate_on() runs without exception
+[PASS] Arduino: vibrate_off() runs without exception
+[PASS] Arduino: buzzer_on() runs without exception
+[PASS] Arduino: buzzer_off() runs without exception
+[PASS] Arduino: rgb_set(255,0,128) runs without exception
+[PASS] Arduino: pump_on() runs without exception
+[PASS] Arduino: pump_off() runs without exception
+[PASS] Arduino: set_ir_intensity(100) sends IR 255
+       ['IR 255']
+[PASS] Arduino: set_ir_intensity(50) sends IR ~127
+       ['IR 127']
+[PASS] Arduino: set_heater(100) sends HEAT 255
+       ['HEAT 255']
+[PASS] Arduino: set_heater(0) sends HEAT 0
+       ['HEAT 0']
+[PASS] Firmware file exists
+[PASS] Firmware: PIN_IR = 5 (D5 → IR LED)
+[PASS] Firmware: PIN_WHITE = 6 (D6 → WHITE LED)
+[PASS] Firmware: PIN_VIB = 9 (D9 → VIBRATION MOTOR)
+[PASS] Firmware: PIN_PUMP = 10 (D10 → CIRCULATION PUMP)
+[PASS] Firmware: PIN_HEAT = 7 (D7 → HEATER (NEW))
+[PASS] Firmware: PIN_TEMP = 2 (D2 → DS18B20 DATA)
+[PASS] Firmware: PING → ZIMON_OK
+[PASS] Firmware: IR command
+[PASS] Firmware: WHITE command
+[PASS] Firmware: VIB command
+[PASS] Firmware: PUMP command
+[PASS] Firmware: HEAT command
+[PASS] Firmware: BUZZER_ON command
+[PASS] Firmware: BUZZER_OFF command
+[PASS] Firmware: TEMP? command
+[PASS] Firmware: STATUS command
+[PASS] PyQt6 QApplication init
+[PASS] UI: Login window initialises
+[PASS] UI: Nav bar initialises
+[PASS] UI: Bottom bar initialises
+[PASS] UI: Environment page initialises
+[PASS] UI: Protocol Builder initialises
+[PASS] UI: Experiments page initialises
+[PASS] UI: Settings page initialises
+[PASS] UI: Larval page initialises
+[PASS] UI: Adult page initialises
+[PASS] Login: Remember Me saves/loads prefs
+[PASS] Environment: stimulus section removed
+[PASS] Environment: camera preview (_MiniPreview) present
+[PASS] Environment: role assignment QComboBox present
+[PASS] Environment: lighting controls (IR ON/OFF) present
+[PASS] Environment: LED/White lighting controls present
+[PASS] Larval: heater stimulus present
+[PASS] Larval: ON/OFF buttons per stimulus
+[PASS] Larval: Continuous/Pulse mode radios
+[PASS] Larval: uses assigned camera role
+[PASS] Larval: Top/Side selector removed
+[PASS] Larval: wellplate overlay present
+[PASS] Adult: heater stimulus present
+[PASS] Adult: camera selection QComboBox present
+[PASS] Adult: FPS label next to preview
+[PASS] Adult: Start Protocol button present
+[PASS] Nav: FPS removed from ribbon
+[PASS] Nav: notification bell is functional
+[PASS] Nav: Manage Users / Logout visible in user menu
+[PASS] Nav: UserMenuBtn high-contrast style
+[PASS] Bottom bar: Camera/Chamber chips removed
+[PASS] Bottom bar: Arduino status present
+[PASS] Bottom bar: temperature in °C
+[PASS] Protocol Builder: category field present
+[PASS] Protocol Builder: category saved to DB
+[PASS] Experiments: Replay wired to open video file
+[PASS] Experiments: Export writes real files
+[PASS] Arduino firmware: D7 HEATER pin defined
+[PASS] Arduino firmware: HEAT command handler
+[PASS] DB: camera_assignments table
+[PASS] DB: protocol category column
+[PASS] DB: list_protocols supports category filter
+[PASS] File exists: main_v2.py
+[PASS] File exists: db/__init__.py
+[PASS] File exists: db/database.py
+[PASS] File exists: backend/arduino_controller.py
+[PASS] File exists: backend/camera_interface.py
+[PASS] File exists: backend/camera_manager.py
+[PASS] File exists: backend/recording_manager.py
+[PASS] File exists: gui_v2/login_window.py
+[PASS] File exists: gui_v2/main_window.py
+[PASS] File exists: gui_v2/nav_bar.py
+[PASS] File exists: gui_v2/bottom_bar.py
+[PASS] File exists: gui_v2/styles_v2.qss
+[PASS] File exists: gui_v2/pages/adult_page.py
+[PASS] File exists: gui_v2/pages/larval_page.py
+[PASS] File exists: gui_v2/pages/environment_page.py
+[PASS] File exists: gui_v2/pages/protocol_builder_page.py
+[PASS] File exists: gui_v2/pages/experiments_page.py
+[PASS] File exists: gui_v2/pages/settings_page.py
+[PASS] File exists: arduino/zfish_controller.ino
+[PASS] File exists: ZIMON_Documentation.md
+[PASS] File exists: ZIMON_Documentation.pdf
+[PASS] File exists: requirements.txt
+[PASS] File exists: zimon.spec
+[PASS] File exists: build_installer.bat

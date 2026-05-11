@@ -1,0 +1,139 @@
+ZIMON FUNCTIONAL TEST REPORT
+Generated : 2026-05-11 15:04:41
+Platform  : win32  Python 3.12.8
+==============================================================
+
+Total: 79  |  Passed: 78  |  Warnings: 1  |  Failed: 0
+
+==============================================================
+[PASS] F2.1 Create researcher user
+       id=2
+[PASS] F2.2 New user can log in
+       role=researcher
+[PASS] F2.3 Password change: old rejected, new accepted
+[PASS] F2.4 Role promoted to admin
+[PASS] F2.5 Deactivated user cannot log in
+[PASS] F5.1 create_experiment() returns exp_id
+       EXP_1778492076
+[PASS] F5.2 Experiment retrievable after finish
+[PASS] F5.3 Status = 'complete'
+[PASS] F5.4 Duration stored correctly
+       4.0s
+[PASS] F5.5 All 7 events retrieved
+       stimuli: ['light', 'buzzer', 'vibration', 'baseline']
+[PASS] F5.6 Events have correct fields (time_sec, stimulus, action, value)
+[PASS] F7.1 list_protocols() returns all protocols
+       count=3
+[PASS] F7.2 Larval filter: includes larval + both, excludes adult
+[PASS] F7.3 Adult filter: includes adult + both, excludes larval
+[PASS] F8.1 All 3 camera assignments saved
+[PASS] F8.2 Webcam_0 has role 'larval_machine_vision'
+[PASS] F8.3 get_camera_for_role('larval_machine_vision') = 'Webcam_0'
+[PASS] F8.4 Camera assignment update (upsert) works
+[PASS] F8.5 Unknown role returns None
+[PASS] F9: IR 100% → IR 255
+       sent=['IR 255']
+[PASS] F9: IR 50%  → IR ~127
+       sent=['IR 127']
+[PASS] F9: IR 0%   → IR 0
+       sent=['IR 0']
+[PASS] F9: White 80% → WHITE 204
+       sent=['WHITE 204']
+[PASS] F9: Heater 100% → HEAT 255
+       sent=['HEAT 255']
+[PASS] F9: Heater 50%  → HEAT 127
+       sent=['HEAT 127']
+[PASS] F9: Heater 0    → HEAT 0
+       sent=['HEAT 0']
+[PASS] F9: Heater ON   → HEAT 255
+       sent=['HEAT 255']
+[PASS] F9: Heater OFF  → HEAT 0
+       sent=['HEAT 0']
+[PASS] F9: Vibrate ON  → VIB 255
+       sent=['VIB 255']
+[PASS] F9: Vibrate OFF → VIB 0
+       sent=['VIB 0']
+[PASS] F9: Buzzer ON   → BUZZER_ON
+       sent=['BUZZER_ON']
+[PASS] F9: Buzzer OFF  → BUZZER_OFF
+       sent=['BUZZER_OFF']
+[PASS] F9: Pump ON     → PUMP 255
+       sent=['PUMP 255']
+[PASS] F9: Pump OFF    → PUMP 0
+       sent=['PUMP 0']
+[PASS] F9: RGB 255,0,0 → RGB 255 0 0
+       sent=['RGB 255 0 0']
+[PASS] F9: RGB 0,128,0 → RGB 0 128 0
+       sent=['RGB 0 128 0']
+[PASS] F9: Intensity > 100% clamped to 255
+       sent=['IR 255']
+[PASS] F9: Negative intensity clamped to 0
+       sent=['IR 0']
+[PASS] F1.1 Login with correct credentials fires login_success
+       username=admin
+[PASS] F1.2 Wrong password is rejected, signal NOT fired
+[PASS] F1.3 Error message text set for wrong credentials
+       Incorrect email/username or password.
+[PASS] F1.4 Remember Me saves username to prefs.json
+       saved username=admin
+[PASS] F1.5 Remember Me pre-fills email on next open
+       pre-filled='admin'
+[PASS] F3.1 CameraManager instantiates
+[PASS] F3.2 refresh_cameras() + list_cameras() complete
+       found: ['Webcam_0']
+[PASS] F3.3 connect_camera() succeeds
+       camera=Webcam_0, ok=True
+[PASS] F3.4 current_camera_name() returns connected camera
+[PASS] F3.5 get_current_fps() returns numeric value (0 when not streaming)
+       fps=60
+[PASS] F3.6 stop_stream() safe when not streaming
+[PASS] F3.7 Camera API fully functional (streaming skipped — requires display)
+[PASS] F4.1 Protocol page created with 4 steps
+       steps=4
+[PASS] F4.2 Protocol saved to DB
+       id=4, category=larval, steps=4
+[PASS] F4.3 Category 'Larval Only' stored as 'larval'
+[PASS] F4.4 All 4 steps stored correctly
+[PASS] F4.5 Protocol loaded back from DB with correct steps
+[PASS] F4.6 Run Protocol _execute_protocol completes synchronously
+       events logged: 4
+[PASS] F4.7 Events log written during execution
+       4 events: ['baseline', 'light', 'vibration', 'buzzer']
+[PASS] F4.8 Experiment record created in DB on Run Protocol
+       exp_id=EXP_1778492076, status=complete
+[PASS] F6.1 Export ran without exception
+       output dir: C:\Users\BLUECL~1\AppData\Local\Temp\zimon_export_test_ra0dl_e8
+[PASS] F6.2 Events CSV written and readable
+       EXP_1778492080_events.csv — 2 rows
+[PASS] F6.3 CSV has correct columns (time_sec, stimulus, action)
+[PASS] F6.4 Metadata JSON written and readable
+       EXP_1778492080_metadata.json — keys: ['id', 'exp_id', 'name', 'protocol_id', 'protocol_name']
+[PASS] F6.5 Metadata JSON contains exp_id and status
+[PASS] F6.6 Protocol JSON written and readable
+       name='Export Test Protocol', steps=1
+[PASS] F6.7 ZIP archive created
+       EXP_1778492080.zip — contains: ['EXP_1778492080_events.csv', 'EXP_1778492080_metadata.json', 'EXP_1778492080_protocol.json']
+[PASS] F10.1 Replay opens correct video file
+       C:\Users\BLUECL~1\AppData\Local\Temp\zimon_replay_keys59xl\EXP_123_video.mp4
+[PASS] F10.2 Missing video shows message, does not crash
+[PASS] F11.1 Settings page instantiates without error
+[PASS] F11.2 Arduino port dropdown populated
+       3 ports
+[WARN] F11.3 Settings save
+       'SettingsPage' object has no attribute '_recording_path'
+[PASS] F12.1 MainWindowV2 instantiates without error
+       title='ZIMON v2.0.0-dev'
+[PASS] F12.2 All pages built in stack
+       10 pages
+[PASS] F12.3 NavBar present
+[PASS] F12.4 BottomBar present
+[PASS] F12.5 Navigate to 'environment'
+       stack index=2
+[PASS] F12.5 Navigate to 'protocol_builder'
+       stack index=3
+[PASS] F12.5 Navigate to 'experiments'
+       stack index=4
+[PASS] F12.5 Navigate to 'mode_adult'
+       stack index=0
+[PASS] F12.5 Navigate to 'mode_larval'
+       stack index=1
