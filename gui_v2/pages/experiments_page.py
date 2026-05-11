@@ -835,7 +835,30 @@ class ExperimentDetailsPanel(QWidget):
         QApplication.clipboard().setText(path)
 
     def _on_replay(self) -> None:
-        pass  # future: trigger video playback in center panel
+        """Open the experiment video in the system default video player."""
+        if not self._current_exp:
+            return
+        path = self._current_exp.get("storage_path") or ""
+        # Find a video file in the storage path
+        video_file = None
+        if os.path.isfile(path) and path.lower().endswith((".mp4", ".avi", ".mov")):
+            video_file = path
+        elif os.path.isdir(path):
+            for f in os.listdir(path):
+                if f.lower().endswith((".mp4", ".avi", ".mov")):
+                    video_file = os.path.join(path, f)
+                    break
+        if video_file and os.path.isfile(video_file):
+            import subprocess
+            try:
+                os.startfile(video_file)
+            except AttributeError:
+                subprocess.Popen(["xdg-open", video_file])
+        else:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(None, "No Video",
+                "No video file found for this experiment.\n"
+                f"Storage path: {path or '(not set)'}")
 
     def _on_export(self, export_type: str) -> None:
         if not self._current_exp:

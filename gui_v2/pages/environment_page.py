@@ -1,123 +1,340 @@
-"""Environment page — Camera Devices + Stimulus Devices, each with status and Test button.
+"""Environment page — Camera Devices + Lighting Controls.
 
-Matches PPT mockup: cards with Connected/Ready badges and individual Test buttons.
+Sections:
+  A. Camera Devices: per-camera cards with preview, role assignment, save.
+  B. Lighting Controls: IR and LED intensity sliders with ON/OFF toggles.
 """
 
 from __future__ import annotations
 
+import numpy as np
+
+import db.database as db
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import (
+    QComboBox,
     QFrame,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
+    QScrollArea,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
 
-class _DeviceCard(QFrame):
-    """Single device row card with status badge and test button."""
+# Role values stored in DB (internal keys)
+_ROLE_OPTIONS = [
+    ("Unassigned",              "unassigned"),
+    ("Machine Vision (Larval)", "larval_machine_vision"),
+    ("Top Webcam (Adult)",      "adult_top"),
+    ("Side Webcam (Adult)",     "adult_side"),
+]
+_LABEL_TO_ROLE = {lbl: key for lbl, key in _ROLE_OPTIONS}
+_ROLE_TO_LABEL = {key: lbl for lbl, key in _ROLE_OPTIONS}
 
-    def __init__(self, name: str, sub: str = "", connected: bool = False,
-                 on_test=None, parent=None) -> None:
+
+class _MiniPreview(QLabel):
+    """Small 200×150 camera preview label."""
+
+    def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setObjectName("DeviceCard")
+        self.setFixedSize(200, 150)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setObjectName("MiniPreview")
+        self.setText("No signal")
+        self.setStyleSheet(
+            "QLabel#MiniPreview { background:#111; color:#aaa; border:1px solid #555; "
+            "border-radius:4px; font-size:11px; }"
+        )
 
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(14, 10, 14, 10)
-        lay.setSpacing(10)
+    def update_frame(self, frame: np.ndarray) -> None:
+        """Accepts a BGR numpy frame and displays it scaled."""
+        try:
+            import cv2
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            img = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
+            pix = img.scaled(
+                self.width(), self.height(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            from PyQt6.QtGui import QPixmap
+            self.setPixmap(QPixmap.fromImage(pix))
+        except Exception:
+            pass
+
+
+class _CameraCard(QFrame):
+    """Card for a single detected camera with preview + role assignment."""
+
+    def __init__(self, camera_id: str, bridge, saved_label: str = "",
+                 saved_role: str = "unassigned", parent=None) -> None:
+        super().__init__(parent)
+        self._camera_id = camera_id
+        self._bridge = bridge
+        self._previewing = False
+        self.setObjectName("DeviceCard")
+        self.setStyleSheet(
+            "QFrame#DeviceCard { background:#ffffff; border:1px solid #dde; "
+            "border-radius:8px; padding:4px; }"
+        )
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(12, 10, 12, 10)
+        root.setSpacing(8)
+
+        # ── Header row ──────────────────────────────────────────────────
+        hdr = QHBoxLayout()
+        hdr.setSpacing(8)
 
         self._dot = QLabel("●")
-        self._dot.setObjectName("DotGreen" if connected else "DotGray")
+        self._dot.setObjectName("DotGray")
         self._dot.setFixedWidth(18)
-        lay.addWidget(self._dot)
+        hdr.addWidget(self._dot)
 
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-        name_lbl = QLabel(name)
+        name_lbl = QLabel(camera_id)
         name_lbl.setObjectName("DeviceName")
-        text_col.addWidget(name_lbl)
-        if sub:
-            sub_lbl = QLabel(sub)
-            sub_lbl.setObjectName("DeviceSub")
-            text_col.addWidget(sub_lbl)
-        lay.addLayout(text_col, 1)
+        hdr.addWidget(name_lbl, 1)
 
-        self._badge = QLabel("Connected" if connected else "Disconnected")
-        self._badge.setObjectName("BadgeGreen" if connected else "BadgeGray")
-        self._badge.setFixedWidth(110)
-        self._badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.addWidget(self._badge)
+        self._status_badge = QLabel("Idle")
+        self._status_badge.setObjectName("BadgeGray")
+        self._status_badge.setFixedWidth(80)
+        self._status_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hdr.addWidget(self._status_badge)
 
-        if on_test:
-            btn = QPushButton("Test ›")
-            btn.setObjectName("SmallButton")
-            btn.setFixedWidth(72)
-            btn.clicked.connect(on_test)
-            lay.addWidget(btn)
+        root.addLayout(hdr)
 
-    def set_connected(self, connected: bool) -> None:
-        self._dot.setObjectName("DotGreen" if connected else "DotGray")
-        self._badge.setText("Connected" if connected else "Disconnected")
-        self._badge.setObjectName("BadgeGreen" if connected else "BadgeGray")
+        # ── Body row: preview + controls ────────────────────────────────
+        body = QHBoxLayout()
+        body.setSpacing(12)
+
+        self._preview = _MiniPreview()
+        body.addWidget(self._preview)
+
+        controls = QVBoxLayout()
+        controls.setSpacing(6)
+
+        role_row = QHBoxLayout()
+        role_lbl = QLabel("Role:")
+        role_lbl.setObjectName("DeviceSub")
+        role_row.addWidget(role_lbl)
+        self._role_combo = QComboBox()
+        for lbl, _ in _ROLE_OPTIONS:
+            self._role_combo.addItem(lbl)
+        # Set saved role
+        saved_display = _ROLE_TO_LABEL.get(saved_role, "Unassigned")
+        idx = self._role_combo.findText(saved_display)
+        if idx >= 0:
+            self._role_combo.setCurrentIndex(idx)
+        role_row.addWidget(self._role_combo, 1)
+        controls.addLayout(role_row)
+
+        label_row = QHBoxLayout()
+        label_lbl = QLabel("Label:")
+        label_lbl.setObjectName("DeviceSub")
+        label_row.addWidget(label_lbl)
+        self._label_edit = QLineEdit()
+        self._label_edit.setPlaceholderText("e.g. Tank 1 camera")
+        self._label_edit.setText(saved_label if saved_label != "unassigned" else "")
+        label_row.addWidget(self._label_edit, 1)
+        controls.addLayout(label_row)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self._save_btn = QPushButton("Save Assignment")
+        self._save_btn.setObjectName("SmallButton")
+        self._save_btn.clicked.connect(self._save_assignment)
+        btn_row.addWidget(self._save_btn)
+
+        self._preview_btn = QPushButton("Preview")
+        self._preview_btn.setObjectName("SmallButton")
+        self._preview_btn.clicked.connect(self._toggle_preview)
+        btn_row.addWidget(self._preview_btn)
+        controls.addLayout(btn_row)
+
+        controls.addStretch(1)
+        body.addLayout(controls, 1)
+        root.addLayout(body)
+
+    # ── Slots ────────────────────────────────────────────────────────────
+
+    def _save_assignment(self) -> None:
+        role_label = self._role_combo.currentText()
+        role_key = _LABEL_TO_ROLE.get(role_label, "unassigned")
+        label_text = self._label_edit.text().strip() or "unassigned"
+        try:
+            db.save_camera_assignment(self._camera_id, label_text, role_key)
+            self._status_badge.setText("Saved")
+            self._status_badge.setObjectName("BadgeBlue")
+            self._status_badge.style().unpolish(self._status_badge)
+            self._status_badge.style().polish(self._status_badge)
+            QTimer.singleShot(2000, self._reset_badge)
+        except Exception as exc:
+            self._status_badge.setText("Error")
+            self._status_badge.setObjectName("BadgeRed")
+            self._status_badge.style().unpolish(self._status_badge)
+            self._status_badge.style().polish(self._status_badge)
+
+    def _reset_badge(self) -> None:
+        text = "Live" if self._previewing else "Idle"
+        obj = "BadgeGreen" if self._previewing else "BadgeGray"
+        self._status_badge.setText(text)
+        self._status_badge.setObjectName(obj)
+        self._status_badge.style().unpolish(self._status_badge)
+        self._status_badge.style().polish(self._status_badge)
+
+    def _toggle_preview(self) -> None:
+        if self._previewing:
+            self._stop_preview()
+        else:
+            self._start_preview()
+
+    def _start_preview(self) -> None:
+        try:
+            ok = self._bridge.camera_manager.start_preview(
+                self._camera_id, self._on_frame
+            )
+            if ok:
+                self._previewing = True
+                self._preview_btn.setText("Stop Preview")
+                self._dot.setObjectName("DotGreen")
+                self._dot.style().unpolish(self._dot)
+                self._dot.style().polish(self._dot)
+                self._status_badge.setText("Live")
+                self._status_badge.setObjectName("BadgeGreen")
+                self._status_badge.style().unpolish(self._status_badge)
+                self._status_badge.style().polish(self._status_badge)
+        except Exception:
+            pass
+
+    def _stop_preview(self) -> None:
+        try:
+            self._bridge.camera_manager.stop_preview(self._camera_id)
+        except Exception:
+            pass
+        self._previewing = False
+        self._preview_btn.setText("Preview")
+        self._preview.clear()
+        self._preview.setText("No signal")
+        self._dot.setObjectName("DotGray")
         self._dot.style().unpolish(self._dot)
         self._dot.style().polish(self._dot)
-        self._badge.style().unpolish(self._badge)
-        self._badge.style().polish(self._badge)
+        self._status_badge.setText("Idle")
+        self._status_badge.setObjectName("BadgeGray")
+        self._status_badge.style().unpolish(self._status_badge)
+        self._status_badge.style().polish(self._status_badge)
+
+    def _on_frame(self, frame: np.ndarray) -> None:
+        self._preview.update_frame(frame)
+
+    def stop_preview_if_active(self) -> None:
+        if self._previewing:
+            self._stop_preview()
 
 
-class _StimulusCard(QFrame):
-    def __init__(self, name: str, on_test=None, parent=None) -> None:
+class _LightingRow(QWidget):
+    """Single lighting channel row: label + ON/OFF + slider + value label + Apply."""
+
+    def __init__(self, title: str, apply_fn, parent=None) -> None:
         super().__init__(parent)
-        self.setObjectName("DeviceCard")
+        self._apply_fn = apply_fn
+        self._last_value = 50  # remember last non-zero value
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(14, 10, 14, 10)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(10)
 
-        self._dot = QLabel("●")
-        self._dot.setObjectName("DotGreen")
-        self._dot.setFixedWidth(18)
-        lay.addWidget(self._dot)
+        lbl = QLabel(title)
+        lbl.setObjectName("DeviceName")
+        lbl.setFixedWidth(160)
+        lay.addWidget(lbl)
 
-        name_lbl = QLabel(name)
-        name_lbl.setObjectName("DeviceName")
-        lay.addWidget(name_lbl, 1)
+        self._on_btn = QPushButton("ON")
+        self._on_btn.setObjectName("SmallButton")
+        self._on_btn.setFixedWidth(50)
+        self._on_btn.clicked.connect(self._turn_on)
+        lay.addWidget(self._on_btn)
 
-        self._badge = QLabel("Ready")
-        self._badge.setObjectName("BadgeBlue")
-        self._badge.setFixedWidth(80)
-        self._badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.addWidget(self._badge)
+        self._off_btn = QPushButton("OFF")
+        self._off_btn.setObjectName("SmallButton")
+        self._off_btn.setFixedWidth(50)
+        self._off_btn.clicked.connect(self._turn_off)
+        lay.addWidget(self._off_btn)
 
-        if on_test:
-            btn = QPushButton(f"Test {name}")
-            btn.setObjectName("SmallButton")
-            btn.setFixedWidth(120)
-            btn.clicked.connect(on_test)
-            lay.addWidget(btn)
+        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider.setRange(0, 100)
+        self._slider.setValue(self._last_value)
+        self._slider.setFixedWidth(200)
+        self._slider.valueChanged.connect(self._on_slider_changed)
+        lay.addWidget(self._slider)
 
-    def set_status(self, text: str, obj_name: str = "BadgeBlue") -> None:
-        self._badge.setText(text)
-        self._badge.setObjectName(obj_name)
-        self._badge.style().unpolish(self._badge)
-        self._badge.style().polish(self._badge)
+        self._val_lbl = QLabel(f"{self._last_value}%")
+        self._val_lbl.setObjectName("DeviceSub")
+        self._val_lbl.setFixedWidth(40)
+        lay.addWidget(self._val_lbl)
+
+        apply_btn = QPushButton("Apply")
+        apply_btn.setObjectName("SmallButton")
+        apply_btn.setFixedWidth(60)
+        apply_btn.clicked.connect(self._apply)
+        lay.addWidget(apply_btn)
+
+        lay.addStretch(1)
+
+    def _on_slider_changed(self, value: int) -> None:
+        self._val_lbl.setText(f"{value}%")
+        if value > 0:
+            self._last_value = value
+
+    def _turn_on(self) -> None:
+        self._slider.setValue(self._last_value)
+        self._apply()
+
+    def _turn_off(self) -> None:
+        self._slider.setValue(0)
+        self._do_apply(0)
+
+    def _apply(self) -> None:
+        self._do_apply(self._slider.value())
+
+    def _do_apply(self, value: int) -> None:
+        try:
+            self._apply_fn(value)
+        except Exception:
+            pass
 
 
 class EnvironmentPage(QWidget):
     def __init__(self, bridge, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._bridge = bridge
+        self._camera_cards: dict[str, _CameraCard] = {}
+        self.setStyleSheet("EnvironmentPage { background: #f0f0ff; }")
         self._build()
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._refresh_camera_status)
-        self._timer.start(2000)
+
+    # ── Build ─────────────────────────────────────────────────────────────────
 
     def _build(self) -> None:
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll)
+
+        content = QWidget()
+        content.setStyleSheet("background: #f0f0ff;")
+        scroll.setWidget(content)
+
+        root = QVBoxLayout(content)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(20)
 
@@ -125,104 +342,106 @@ class EnvironmentPage(QWidget):
         title.setObjectName("PageTitle")
         root.addWidget(title)
 
-        # ── Camera Devices ──────────────────────────────────────────────
-        cam_group = QGroupBox("Camera Devices")
-        cam_lay = QVBoxLayout(cam_group)
-        cam_lay.setSpacing(8)
+        # ── Section A: Camera Devices ────────────────────────────────────
+        self._cam_group = QGroupBox("Camera Devices")
+        self._cam_outer_lay = QVBoxLayout(self._cam_group)
+        self._cam_outer_lay.setSpacing(8)
 
-        self._cam_machine = _DeviceCard(
-            "Machine Vision (Larval)", "High-speed scientific camera",
-            connected=False, on_test=lambda: self._test_camera(0)
+        # Top toolbar
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(10)
+        self._cam_count_lbl = QLabel("Scanning…")
+        self._cam_count_lbl.setObjectName("DeviceSub")
+        toolbar.addWidget(self._cam_count_lbl)
+        toolbar.addStretch(1)
+        refresh_btn = QPushButton("Refresh Cameras")
+        refresh_btn.setObjectName("SmallButton")
+        refresh_btn.clicked.connect(self._refresh_cameras)
+        toolbar.addWidget(refresh_btn)
+        self._cam_outer_lay.addLayout(toolbar)
+
+        # Container for cards
+        self._cards_container = QWidget()
+        self._cards_lay = QVBoxLayout(self._cards_container)
+        self._cards_lay.setContentsMargins(0, 0, 0, 0)
+        self._cards_lay.setSpacing(8)
+        self._cam_outer_lay.addWidget(self._cards_container)
+
+        root.addWidget(self._cam_group)
+
+        # ── Section B: Lighting Controls ─────────────────────────────────
+        light_group = QGroupBox("Lighting Controls")
+        light_lay = QVBoxLayout(light_group)
+        light_lay.setSpacing(10)
+
+        self._ir_row = _LightingRow(
+            "IR Backlight",
+            lambda val: self._apply_ir(val),
         )
-        self._cam_adult_top = _DeviceCard(
-            "USB Camera (Adult Top)", "Top-down view",
-            connected=False, on_test=lambda: self._test_camera(1)
+        light_lay.addWidget(self._ir_row)
+
+        self._led_row = _LightingRow(
+            "LED (White) Backlight",
+            lambda val: self._apply_white(val),
         )
-        self._cam_adult_side = _DeviceCard(
-            "USB Camera (Adult Side)", "Side view",
-            connected=False, on_test=lambda: self._test_camera(2)
-        )
+        light_lay.addWidget(self._led_row)
 
-        cam_lay.addWidget(self._cam_machine)
-        cam_lay.addWidget(self._cam_adult_top)
-        cam_lay.addWidget(self._cam_adult_side)
-
-        self._cam_ready_lbl = QLabel("System Ready: Checking…")
-        self._cam_ready_lbl.setObjectName("ReadyLabel")
-        cam_lay.addWidget(self._cam_ready_lbl)
-        root.addWidget(cam_group)
-
-        # ── Stimulus Devices ────────────────────────────────────────────
-        stim_group = QGroupBox("Stimulus Devices")
-        stim_lay = QGridLayout(stim_group)
-        stim_lay.setSpacing(8)
-        stim_lay.setColumnStretch(0, 1)
-        stim_lay.setColumnStretch(1, 1)
-
-        self._stim_light = _StimulusCard("Light",     on_test=self._test_light)
-        self._stim_vib   = _StimulusCard("Vibration", on_test=self._test_vibration)
-        self._stim_buzz  = _StimulusCard("Buzzer",    on_test=self._test_buzzer)
-        self._stim_water = _StimulusCard("Water Flow",on_test=self._test_water)
-
-        stim_lay.addWidget(self._stim_light, 0, 0)
-        stim_lay.addWidget(self._stim_vib,   0, 1)
-        stim_lay.addWidget(self._stim_buzz,  1, 0)
-        stim_lay.addWidget(self._stim_water, 1, 1)
-
-        self._stim_ready_lbl = QLabel("System Ready: YES ✓")
-        self._stim_ready_lbl.setObjectName("ReadyLabelGreen")
-        stim_lay.addWidget(self._stim_ready_lbl, 2, 0, 1, 2)
-        root.addWidget(stim_group)
-
+        root.addWidget(light_group)
         root.addStretch(1)
 
-    def _refresh_camera_status(self) -> None:
-        # Use list_cameras() on the manager directly (no refresh scan) to avoid
-        # stopping any active stream — refresh_cameras() kills webcam streams.
+        # Populate cameras
+        self._populate_camera_cards()
+
+    # ── Camera helpers ────────────────────────────────────────────────────────
+
+    def _populate_camera_cards(self) -> None:
+        """Build one card per detected camera, restoring saved assignments."""
+        # Remove old cards
+        for card in self._camera_cards.values():
+            card.stop_preview_if_active()
+            self._cards_lay.removeWidget(card)
+            card.deleteLater()
+        self._camera_cards.clear()
+
         cameras = self._bridge.camera_manager.list_cameras()
-        streaming = self._bridge.camera_manager.is_streaming()
-        has_any = bool(cameras)
-        self._cam_machine.set_connected(streaming)
-        self._cam_adult_top.set_connected(len(cameras) > 1 and streaming)
-        self._cam_adult_side.set_connected(False)
-        ready = streaming or has_any
-        self._cam_ready_lbl.setText(
-            "System Ready: YES ✓" if ready else "System Ready: NO — connect a camera"
+        assignments = {}
+        try:
+            assignments = db.get_camera_assignments()
+        except Exception:
+            pass
+
+        for cam_id in cameras:
+            saved = assignments.get(cam_id, {})
+            card = _CameraCard(
+                camera_id=cam_id,
+                bridge=self._bridge,
+                saved_label=saved.get("label", ""),
+                saved_role=saved.get("role", "unassigned"),
+            )
+            self._cards_lay.addWidget(card)
+            self._camera_cards[cam_id] = card
+
+        count = len(cameras)
+        self._cam_count_lbl.setText(
+            f"{count} camera{'s' if count != 1 else ''} detected"
         )
-        self._cam_ready_lbl.setObjectName("ReadyLabelGreen" if ready else "ReadyLabel")
 
-    def _test_camera(self, idx: int) -> None:
-        cameras = self._bridge.camera_manager.list_cameras()
-        if cameras and idx < len(cameras):
-            self._bridge.start_camera_preview(cameras[idx])
+    def _refresh_cameras(self) -> None:
+        """Re-scan cameras without killing Basler streams."""
+        try:
+            self._bridge.camera_manager.refresh_cameras()
+        except Exception:
+            pass
+        self._populate_camera_cards()
 
-    def _test_light(self) -> None:
+    # ── Lighting helpers ──────────────────────────────────────────────────────
+
+    def _apply_ir(self, value: int) -> None:
         ard = getattr(self._bridge, "_arduino", None)
         if ard and ard.is_connected():
-            ard.set_ir_intensity(50)
-            QTimer.singleShot(1000, lambda: ard.set_ir_intensity(0))
-        self._stim_light.set_status("Testing…", "BadgeYellow")
-        QTimer.singleShot(1200, lambda: self._stim_light.set_status("Ready", "BadgeBlue"))
+            ard.set_ir_intensity(value)
 
-    def _test_vibration(self) -> None:
+    def _apply_white(self, value: int) -> None:
         ard = getattr(self._bridge, "_arduino", None)
         if ard and ard.is_connected():
-            ard.vibrate_timed(500)
-        self._stim_vib.set_status("Testing…", "BadgeYellow")
-        QTimer.singleShot(700, lambda: self._stim_vib.set_status("Ready", "BadgeBlue"))
-
-    def _test_buzzer(self) -> None:
-        ard = getattr(self._bridge, "_arduino", None)
-        if ard and ard.is_connected():
-            ard.write_command("BUZZER_ON")
-            QTimer.singleShot(500, lambda: ard.write_command("BUZZER_OFF"))
-        self._stim_buzz.set_status("Testing…", "BadgeYellow")
-        QTimer.singleShot(700, lambda: self._stim_buzz.set_status("Ready", "BadgeBlue"))
-
-    def _test_water(self) -> None:
-        ard = getattr(self._bridge, "_arduino", None)
-        if ard and ard.is_connected():
-            ard.write_command("PUMP_ON")
-            QTimer.singleShot(300, lambda: ard.write_command("PUMP_OFF"))
-        self._stim_water.set_status("Testing…", "BadgeYellow")
-        QTimer.singleShot(500, lambda: self._stim_water.set_status("Ready", "BadgeBlue"))
+            ard.set_white_intensity(value)

@@ -1,4 +1,4 @@
-"""SQLite database layer for ZIMON — users, protocols, experiments."""
+"""SQLite database layer for ZIMON — users, protocols, experiments, camera assignments."""
 
 from __future__ import annotations
 
@@ -25,6 +25,13 @@ def init_db() -> None:
     """Create tables and seed default admin if first run."""
     with _get_conn() as conn:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS camera_assignments (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                camera_id TEXT NOT NULL UNIQUE,
+                label    TEXT NOT NULL DEFAULT 'unassigned',
+                role     TEXT NOT NULL DEFAULT 'unassigned'
+            );
+
             CREATE TABLE IF NOT EXISTS users (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 username  TEXT NOT NULL UNIQUE,
@@ -40,6 +47,7 @@ def init_db() -> None:
                 name        TEXT NOT NULL,
                 description TEXT,
                 steps       TEXT NOT NULL DEFAULT '[]',
+                category    TEXT NOT NULL DEFAULT 'both',
                 created_by  INTEGER,
                 created     REAL NOT NULL,
                 updated     REAL NOT NULL
@@ -135,27 +143,37 @@ def delete_user(uid: int) -> bool:
 # ── Protocols ─────────────────────────────────────────────────────────────────
 
 def save_protocol(name: str, description: str, steps: list, created_by: int,
-                  protocol_id: int | None = None) -> int:
+                  protocol_id: int | None = None, category: str = "both") -> int:
     now = time.time()
     steps_json = json.dumps(steps)
     with _get_conn() as conn:
         if protocol_id:
             conn.execute(
-                "UPDATE protocols SET name=?,description=?,steps=?,updated=? WHERE id=?",
-                (name, description, steps_json, now, protocol_id),
+                "UPDATE protocols SET name=?,description=?,steps=?,category=?,updated=? WHERE id=?",
+                (name, description, steps_json, category, now, protocol_id),
             )
             return protocol_id
         else:
             cur = conn.execute(
-                "INSERT INTO protocols (name,description,steps,created_by,created,updated) VALUES (?,?,?,?,?,?)",
-                (name, description, steps_json, created_by, now, now),
+                "INSERT INTO protocols (name,description,steps,category,created_by,created,updated)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (name, description, steps_json, category, created_by, now, now),
             )
             return cur.lastrowid
 
 
-def list_protocols() -> list[dict]:
+def list_protocols(category: str | None = None) -> list[dict]:
+    """List protocols, optionally filtered by category ('larval','adult','both')."""
     with _get_conn() as conn:
-        rows = conn.execute("SELECT * FROM protocols ORDER BY updated DESC").fetchall()
+        if category and category != "both":
+            rows = conn.execute(
+                "SELECT * FROM protocols WHERE category=? OR category='both' ORDER BY updated DESC",
+                (category,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM protocols ORDER BY updated DESC").fetchall()
+
+
         result = []
         for r in rows:
             d = dict(r)
@@ -217,3 +235,31 @@ def list_experiments(limit: int = 50) -> list[dict]:
             d["events_log"] = json.loads(d.get("events_log") or "[]")
             result.append(d)
         return result
+
+
+# ── Camera Assignments ────────────────────────────────────────────────────────
+
+def save_camera_assignment(camera_id: str, label: str, role: str) -> None:
+    """Upsert a camera assignment (role: larval_machine_vision | adult_top | adult_side | unassigned)."""
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO camera_assignments (camera_id, label, role) VALUES (?,?,?) "
+            "ON CONFLICT(camera_id) DO UPDATE SET label=excluded.label, role=excluded.role",
+            (camera_id, label, role)
+        )
+
+
+def get_camera_assignments() -> dict:
+    """Returns {camera_id: {label, role}} dict."""
+    with _get_conn() as conn:
+        rows = conn.execute("SELECT camera_id, label, role FROM camera_assignments").fetchall()
+        return {r["camera_id"]: {"label": r["label"], "role": r["role"]} for r in rows}
+
+
+def get_camera_for_role(role: str) -> Optional[str]:
+    """Returns camera_id assigned to this role, or None."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT camera_id FROM camera_assignments WHERE role=? LIMIT 1", (role,)
+        ).fetchone()
+        return row["camera_id"] if row else None

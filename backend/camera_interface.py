@@ -622,11 +622,11 @@ class CameraController(QObject):
         ]
         
         for backend_id, backend_name in backends:
-            # Scan a small set for fast boot; use Refresh to rescan if needed
-            for idx in range(5):
+            # Enumerate all indices 0-7 to find every connected webcam
+            for idx in range(8):
                 if idx in found_indices:
                     continue
-                
+
                 cap = None
                 try:
                     cap = cv2.VideoCapture(idx, backend_id)
@@ -634,14 +634,14 @@ class CameraController(QObject):
                         # Test camera with minimal settings
                         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                         ret, frame = cap.read()
-                        
+
                         if ret and frame is not None:
                             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                            
+
                             # Use stable name; resolution can change at runtime
                             cam_name = f"Webcam_{idx}"
-                            
+
                             self.cameras[cam_name] = {
                                 "type": CameraType.WEBCAM,
                                 "index": idx,
@@ -649,16 +649,15 @@ class CameraController(QObject):
                                 "backend_id": backend_id,
                                 "settings": {
                                     "resolution": (width, height),
-                                    "fps": 60,  # Changed from 30 to 60
+                                    "fps": 60,
                                     "zoom": 1.0
                                 }
                             }
                             detected.append(cam_name)
                             found_indices.add(idx)
                             self.logger.info(f"Found webcam: {cam_name} ({width}x{height}) via {backend_name}")
-                            # Fast boot: stop scanning after first working webcam.
-                            break
-                        
+                            # Do NOT break — continue scanning remaining indices
+
                         cap.release()
                     else:
                         if cap:
@@ -669,7 +668,9 @@ class CameraController(QObject):
                             cap.release()
                         except:
                             pass
-            
+
+            # After scanning all indices with this backend, stop if we found any cameras.
+            # This avoids re-registering the same physical cameras under multiple backends.
             if found_indices:
                 break
         

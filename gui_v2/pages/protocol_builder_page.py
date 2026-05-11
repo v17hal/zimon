@@ -293,8 +293,12 @@ class ProtocolBuilderPage(QWidget):
         self._name_edit.setPlaceholderText("e.g. Startle Response")
         self._desc_edit = QLineEdit()
         self._desc_edit.setPlaceholderText("Brief description")
+        from PyQt6.QtWidgets import QComboBox as _CB
+        self._category_combo = _CB()
+        self._category_combo.addItems(["Both (Larval & Adult)", "Larval Only", "Adult Only"])
         meta_lay.addRow("Name:", self._name_edit)
         meta_lay.addRow("Description:", self._desc_edit)
+        meta_lay.addRow("Category:", self._category_combo)
         left_lay.addWidget(meta_box)
 
         # Add step buttons
@@ -479,8 +483,15 @@ class ProtocolBuilderPage(QWidget):
             QMessageBox.warning(self, "Required", "Please enter a protocol name.")
             return
         desc = self._desc_edit.text().strip()
+        category_map = {
+            "Both (Larval & Adult)": "both",
+            "Larval Only": "larval",
+            "Adult Only": "adult",
+        }
+        category = category_map.get(self._category_combo.currentText(), "both")
         uid = self._user.get("id", 0)
-        pid = db.save_protocol(name, desc, self._steps, uid, self._current_protocol_id)
+        pid = db.save_protocol(name, desc, self._steps, uid, self._current_protocol_id,
+                               category=category)
         self._current_protocol_id = pid
         self._refresh_protocol_list()
         QMessageBox.information(self, "Saved", f"Protocol '{name}' saved.")

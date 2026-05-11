@@ -429,30 +429,65 @@ class ArduinoController:
             return False
 
     def set_ir_intensity(self, percent: float) -> bool:
-        v = max(0, min(100, int(round(percent))))
-        return self.write_command(f"ENV_IR {v}")
+        v = max(0, min(255, int(round(percent * 2.55))))
+        return self.write_command(f"IR {v}")
 
     def set_white_intensity(self, percent: float) -> bool:
-        v = max(0, min(100, int(round(percent))))
-        return self.write_command(f"ENV_WHITE {v}")
+        v = max(0, min(255, int(round(percent * 2.55))))
+        return self.write_command(f"WHITE {v}")
+
+    def set_heater(self, percent: float) -> bool:
+        """Control D7 heater — 0-100% maps to 0-255 PWM."""
+        v = max(0, min(255, int(round(percent * 2.55))))
+        return self.write_command(f"HEAT {v}")
+
+    def heater_on(self) -> bool:
+        return self.write_command("HEAT 255")
+
+    def heater_off(self) -> bool:
+        return self.write_command("HEAT 0")
 
     def vibrate_on(self) -> bool:
-        return self.write_command("VIBRATE_ON")
+        return self.write_command("VIB 255")
 
     def vibrate_off(self) -> bool:
-        return self.write_command("VIBRATE_OFF")
+        return self.write_command("VIB 0")
 
     def vibrate_timed(self, duration_ms: int) -> bool:
-        d = max(0, int(duration_ms))
-        return self.write_command(f"VIBRATE_TIMED {d}")
+        """Send vibrate on, then schedule off after duration_ms."""
+        import threading
+        self.write_command("VIB 255")
+        t = threading.Timer(duration_ms / 1000.0, self.vibrate_off)
+        t.daemon = True
+        t.start()
+        return True
+
+    def buzzer_on(self) -> bool:
+        return self.write_command("BUZZER_ON")
+
+    def buzzer_off(self) -> bool:
+        return self.write_command("BUZZER_OFF")
 
     def rgb_set(self, r: int, g: int, b: int) -> bool:
         r = max(0, min(255, int(r)))
         g = max(0, min(255, int(g)))
         b = max(0, min(255, int(b)))
-        return self.write_command(f"RGB_SET {r} {g} {b}")
+        return self.write_command(f"RGB {r} {g} {b}")
+
+    def pump_on(self) -> bool:
+        return self.write_command("PUMP 255")
+
+    def pump_off(self) -> bool:
+        return self.write_command("PUMP 0")
 
     def timed_stimulus(self, delay_ms: int, duration_ms: int) -> bool:
-        return self.write_command(
-            f"TIMED_STIMULUS {max(0, int(delay_ms))} {max(0, int(duration_ms))}"
-        )
+        import threading
+        def _run():
+            import time as _time
+            _time.sleep(delay_ms / 1000.0)
+            self.write_command("VIB 255")
+            _time.sleep(duration_ms / 1000.0)
+            self.write_command("VIB 0")
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        return True

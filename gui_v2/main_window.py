@@ -213,16 +213,21 @@ class MainWindowV2(QMainWindow):
     # ── Timers ───────────────────────────────────────────────────────────────
 
     def _tick_fps(self) -> None:
-        fps = self._bridge.get_current_fps()
-        self._nav.set_fps(f"{fps:.0f}" if fps > 0 else "—")
+        # FPS now shown next to camera preview on Adult/Larval pages, not in nav
+        pass
 
     def _tick_temp(self) -> None:
         ard = getattr(self._bridge, "_arduino", None)
-        if ard and ard.is_connected():
-            t = ard.read_temperature_c()
-            if t is not None:
-                self._bottom.set_temperature(f"{t:.1f} °C")
-                return
+        connected = ard is not None and ard.is_connected()
+        self._bottom.set_arduino_status(connected)
+        if connected:
+            try:
+                t = ard.read_temperature_c()
+                if t is not None:
+                    self._bottom.set_temperature(f"{t:.1f} °C")
+                    return
+            except Exception:
+                pass
         self._bottom.set_temperature("—")
 
     # ── User actions ─────────────────────────────────────────────────────────

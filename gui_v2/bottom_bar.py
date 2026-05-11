@@ -1,4 +1,4 @@
-"""Bottom status bar — matches PPT: icons + Camera/Chamber/Temperature + tip + Run Protocol."""
+"""Bottom status bar — Temperature + Arduino status + tip message."""
 
 from __future__ import annotations
 
@@ -12,65 +12,57 @@ class BottomBar(QFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("BottomBar")
-        self.setFixedHeight(40)
+        self.setFixedHeight(36)
         self._build()
 
     def _build(self) -> None:
         lay = QHBoxLayout(self)
         lay.setContentsMargins(16, 0, 16, 0)
-        lay.setSpacing(0)
+        lay.setSpacing(24)
 
-        # Nav arrows
-        btn_left = QPushButton("‹")
-        btn_left.setObjectName("SmallButton")
-        btn_left.setFixedSize(24, 24)
-        lay.addWidget(btn_left)
-        lay.addSpacing(10)
+        # Arduino connection status
+        self._arduino_lbl = QLabel("● Arduino: Disconnected")
+        self._arduino_lbl.setObjectName("BottomChipRed")
+        lay.addWidget(self._arduino_lbl)
 
-        # Status chips
-        self._cam_lbl  = self._chip("📷", "Camera",      "Idle",  False)
-        self._cham_lbl = self._chip("⚙",  "Chamber",     "Idle",  False)
-        self._temp_lbl = self._chip("🌡", "Temperature", "—",     False)
-
-        lay.addWidget(self._cam_lbl)
-        lay.addSpacing(20)
-        lay.addWidget(self._cham_lbl)
-        lay.addSpacing(20)
+        # Temperature
+        self._temp_lbl = QLabel("🌡 Temperature: —")
+        self._temp_lbl.setObjectName("BottomChip")
         lay.addWidget(self._temp_lbl)
-        lay.addSpacing(10)
 
-        # Tip message
+        # Tip / context message
         self._tip = QLabel("All devices connected and ready. You're good to begin.")
         self._tip.setObjectName("BottomTip")
         lay.addWidget(self._tip)
+
         lay.addStretch(1)
 
-        btn_right = QPushButton("›")
-        btn_right.setObjectName("SmallButton")
-        btn_right.setFixedSize(24, 24)
-        lay.addWidget(btn_right)
-        lay.addSpacing(12)
-
+        # Run Protocol button (shown contextually)
         self._run_btn = QPushButton("▶  Run Protocol")
         self._run_btn.setObjectName("RunProtocolBtn")
-        self._run_btn.setFixedHeight(30)
+        self._run_btn.setFixedHeight(28)
         self._run_btn.clicked.connect(self.run_protocol_clicked.emit)
         self._run_btn.hide()
         lay.addWidget(self._run_btn)
 
-    def _chip(self, icon: str, name: str, value: str, connected: bool) -> QLabel:
-        lbl = QLabel(f"{icon} {name}  {'Connected' if connected else value}")
-        lbl.setObjectName("BottomChip")
-        return lbl
-
     def set_camera(self, status: str, connected: bool) -> None:
-        self._cam_lbl.setText(f"📷 Camera  {status}")
+        pass  # Camera/Chamber chips removed per client request
 
     def set_chamber(self, status: str, connected: bool = False) -> None:
-        self._cham_lbl.setText(f"⚙ Chamber  {status}")
+        pass
 
     def set_temperature(self, temp_str: str) -> None:
-        self._temp_lbl.setText(f"🌡 Temperature  {temp_str}")
+        self._temp_lbl.setText(f"🌡 {temp_str}")
+
+    def set_arduino_status(self, connected: bool) -> None:
+        if connected:
+            self._arduino_lbl.setText("● Arduino: Connected")
+            self._arduino_lbl.setObjectName("BottomChipGreen")
+        else:
+            self._arduino_lbl.setText("● Arduino: Disconnected")
+            self._arduino_lbl.setObjectName("BottomChipRed")
+        self._arduino_lbl.style().unpolish(self._arduino_lbl)
+        self._arduino_lbl.style().polish(self._arduino_lbl)
 
     def set_tip(self, msg: str) -> None:
         self._tip.setText(msg)

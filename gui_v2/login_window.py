@@ -1,6 +1,12 @@
-"""Login window — matches PPT mockup: left logo panel, right form, bottom status bar."""
+"""Login window — left logo panel, right form, bottom status bar.
+Remember Me saves last-used username to ~/.zimon/prefs.json.
+Login triggered by pressing Enter in password field (no separate button needed).
+"""
 
 from __future__ import annotations
+
+import json
+import os
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -18,6 +24,22 @@ from PyQt6.QtWidgets import (
 )
 
 from db.database import login
+
+_PREFS_PATH = os.path.join(os.path.expanduser("~"), ".zimon", "prefs.json")
+
+
+def _load_prefs() -> dict:
+    try:
+        with open(_PREFS_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_prefs(prefs: dict) -> None:
+    os.makedirs(os.path.dirname(_PREFS_PATH), exist_ok=True)
+    with open(_PREFS_PATH, "w") as f:
+        json.dump(prefs, f)
 
 
 class LoginWindow(QWidget):
@@ -113,7 +135,7 @@ class LoginWindow(QWidget):
         right_lay.addLayout(opts)
         right_lay.addSpacing(22)
 
-        # Login button
+        # Login button (kept for mouse users; Enter key also triggers login)
         self._btn_login = QPushButton("Login  →")
         self._btn_login.setObjectName("LoginButton")
         self._btn_login.setFixedHeight(44)
@@ -122,6 +144,13 @@ class LoginWindow(QWidget):
         self._email.returnPressed.connect(lambda: self._pw.setFocus())
         right_lay.addWidget(self._btn_login)
         right_lay.addSpacing(20)
+
+        # Pre-fill from saved prefs
+        prefs = _load_prefs()
+        if prefs.get("remember_me") and prefs.get("username"):
+            self._email.setText(prefs["username"])
+            self._remember.setChecked(True)
+            self._pw.setFocus()
 
         # Info note: no self-registration
         note = QLabel("New to ZIMON? Contact your administrator to create an account.")
@@ -189,6 +218,11 @@ class LoginWindow(QWidget):
         self._btn_login.setText("Login  →")
 
         if user:
+            # Save Remember Me preference
+            _save_prefs({
+                "remember_me": self._remember.isChecked(),
+                "username": email if self._remember.isChecked() else "",
+            })
             self._err.hide()
             self.login_success.emit(user)
         else:
