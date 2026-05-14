@@ -854,3 +854,195 @@ QDialogButtonBox QPushButton {
     padding: 6px 16px;
     border-radius: 8px;
 }
+
+/* ── Video playback controls ─────────────────────────────────────────────── */
+
+#PlaybackBtn {
+    background-color: #f1f5f9;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #475569;
+}
+
+#PlaybackBtn:hover { background-color: #eef2ff; border-color: #c7d2fe; color: #4f46e5; }
+#PlaybackBtn:disabled { color: #cbd5e1; background-color: #f8fafc; }
+
+#PlaybackTime {
+    color: #475569;
+    font-size: 12px;
+    min-width: 90px;
+}
+
+#PlaybackTabs { background: transparent; border: none; }
+
+QTabWidget::pane {
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 0 8px 8px 8px;
+}
+
+QTabBar::tab {
+    background: #f1f5f9;
+    border: 1.5px solid #e2e8f0;
+    border-bottom: none;
+    padding: 6px 16px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+QTabBar::tab:selected {
+    background: #ffffff;
+    color: #4f46e5;
+    font-weight: 600;
+    border-color: #c7d2fe;
+}
+
+#SummaryText {
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+#IconBtn {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #64748b;
+    font-size: 13px;
+}
+
+#IconBtn:hover { background: #eef2ff; }
+
+/* ── Change password dialog ──────────────────────────────────────────────── */
+
+#WarningLabel {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 12px;
+    color: #92400e;
+    font-weight: 500;
+}
+
+/* ── Settings page extras ────────────────────────────────────────────────── */
+
+#SettingsCombo, #SettingsSpin, #SettingsLineEdit, #SettingsCheck {
+    background-color: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 5px 10px;
+    color: #1e293b;
+}
+
+#RowLabel {
+    color: #374151;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#SectionSeparator {
+    color: #e2e8f0;
+    background-color: #e2e8f0;
+    max-height: 1px;
+}
+
+/* ── Notification header ─────────────────────────────────────────────────── */
+
+#NotifHeader {
+    background-color: #4f46e5;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 13px;
+    padding-left: 12px;
+    min-height: 36px;
+}
+
+#NotifList {
+    background: #ffffff;
+    border: none;
+    font-size: 12px;
+    color: #374151;
+}
+
+/* ── Filter combos (Experiments) ─────────────────────────────────────────── */
+
+#FilterCombo, #SearchEdit {
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 5px 8px;
+    color: #374151;
+    font-size: 12px;
+}
+
+#ExperimentList {
+    background: #ffffff;
+    border: none;
+    outline: none;
+}
+
+#TableHeaderCell {
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+#TableHeader {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+#PageBtn {
+    background: #f1f5f9;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 4px;
+    color: #475569;
+    font-size: 14px;
+    padding: 0;
+}
+
+#PageLabel {
+    color: #6b7280;
+    font-size: 12px;
+    min-width: 40px;
+}
+
+#SmallBtn {
+    background-color: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: #475569;
+    font-size: 12px;
+}
+
+#SmallBtn:hover { background-color: #eef2ff; border-color: #c7d2fe; color: #6366f1; }
+
+/* ── Value labels (stimulus) ─────────────────────────────────────────────── */
+
+#ValueLabel {
+    color: #6366f1;
+    font-weight: 600;
+    font-size: 12px;
+    min-width: 36px;
+}
+
+/* ── Detail key/value rows ───────────────────────────────────────────────── */
+
+#DetailKey {
+    color: #9ca3af;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+#DetailValue {
+    color: #1e293b;
+    font-size: 12px;
+    font-weight: 500;
+}

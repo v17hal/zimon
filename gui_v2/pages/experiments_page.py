@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import time
+import threading
 from typing import Optional
 
 from PyQt6.QtCore import (
@@ -126,6 +127,24 @@ class PlaybackTimelineWidget(QWidget):
         self.setObjectName("PlaybackTimeline")
         self.setMinimumHeight(120)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._events: list[dict] = []
+        self._total_sec: float = 0.0
+
+    def set_events(self, events: list[dict], total_sec: float) -> None:
+        """Populate timeline from the experiment events log."""
+        self._events = events
+        self._total_sec = total_sec or 1.0
+        # Rebuild dynamic rows from events
+        stimuli = {}
+        for ev in events:
+            s = ev.get("stimulus", "")
+            if s and s not in stimuli:
+                stimuli[s] = []
+            if s:
+                stimuli[s].append(ev)
+        # Store for paintEvent
+        self._dyn_rows = stimuli
+        self.update()
 
     def paintEvent(self, event) -> None:
         p = QPainter(self)
@@ -579,122 +598,244 @@ class ExperimentsLogPanel(QWidget):
 # ── Center panel: playback ───────────────────────────────────────────────────
 
 class PlaybackPanel(QWidget):
-    """Center panel: video placeholder + controls + timeline/summary tabs."""
+    """Center panel: in-app OpenCV video player + timeline/summary tabs."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("PlaybackPanel")
+        self._video_path: str = ""
+        self._cap = None          # cv2.VideoCapture
+        self._total_frames = 0
+        self._fps_video = 30.0
+        self._current_frame = 0
+        self._playing = False
+        self._play_thread: threading.Thread | None = None
         self._build()
 
     def _build(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 14, 16, 10)
-        root.setSpacing(10)
+        root.setSpacing(8)
 
         # Title row
         title_row = QHBoxLayout()
-        title_row.setSpacing(8)
-        title = _section_title("Experiment Playback")
-        title_row.addWidget(title)
+        title_row.addWidget(_section_title("Experiment Playback"))
         title_row.addStretch()
-
-        # Icon buttons (placeholder)
-        for icon_text in ("⚙", "↗"):
-            btn = QPushButton(icon_text)
-            btn.setObjectName("IconBtn")
-            btn.setFixedSize(28, 28)
-            title_row.addWidget(btn)
         root.addLayout(title_row)
 
-        # Video placeholder
-        self._video_area = QLabel()
-        self._video_area.setObjectName("VideoPlaceholder")
-        self._video_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._video_area.setText("No experiment selected\nSelect an experiment from the list to view playback")
-        self._video_area.setStyleSheet(
-            "background:#1a1a2e; color:#888; border-radius:8px;"
-            " font-size:13px;"
-        )
-        # 16:9 ratio approximation
-        self._video_area.setMinimumHeight(240)
-        self._video_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        root.addWidget(self._video_area, 3)
+        # ── Video display ─────────────────────────────────────────────────
+        from PyQt6.QtCore import QTimer as _QT
+        self._video_lbl = QLabel()
+        self._video_lbl.setObjectName("VideoPlayArea")
+        self._video_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._video_lbl.setMinimumHeight(220)
+        self._video_lbl.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._video_lbl.setStyleSheet(
+            "background:#0f172a; border-radius:8px; color:#64748b; font-size:13px;")
+        self._video_lbl.setText("No experiment selected")
+        root.addWidget(self._video_lbl, 3)
 
-        # Playback controls
-        ctrl_row = QHBoxLayout()
-        ctrl_row.setSpacing(6)
+        # ── Scrub slider ──────────────────────────────────────────────────
+        self._scrub = QSlider(Qt.Orientation.Horizontal)
+        self._scrub.setRange(0, 1000)
+        self._scrub.setValue(0)
+        self._scrub.setEnabled(False)
+        self._scrub.sliderPressed.connect(self._on_scrub_press)
+        self._scrub.sliderReleased.connect(self._on_scrub_release)
+        self._scrub.sliderMoved.connect(self._on_scrub_move)
+        root.addWidget(self._scrub)
 
-        for btn_text, btn_id in [("▶", "play"), ("⏸", "pause"), ("⏭", "skip")]:
-            btn = QPushButton(btn_text)
+        # ── Transport controls ────────────────────────────────────────────
+        ctrl = QHBoxLayout()
+        ctrl.setSpacing(6)
+
+        self._btn_play  = QPushButton("▶")
+        self._btn_pause = QPushButton("⏸")
+        self._btn_stop  = QPushButton("⏹")
+        for btn in (self._btn_play, self._btn_pause, self._btn_stop):
             btn.setObjectName("PlaybackBtn")
             btn.setFixedSize(32, 32)
-            ctrl_row.addWidget(btn)
+            btn.setEnabled(False)
+            ctrl.addWidget(btn)
 
-        vol_btn = QPushButton("🔊")
-        vol_btn.setObjectName("PlaybackBtn")
-        vol_btn.setFixedSize(32, 32)
-        ctrl_row.addWidget(vol_btn)
-
-        ctrl_row.addWidget(QFrame())  # spacer
+        ctrl.addStretch(1)
 
         self._time_lbl = QLabel("00:00 / 00:00")
         self._time_lbl.setObjectName("PlaybackTime")
-        font = self._time_lbl.font()
-        font.setFamily("Consolas")
-        self._time_lbl.setFont(font)
-        ctrl_row.addStretch()
-        ctrl_row.addWidget(self._time_lbl)
-        root.addLayout(ctrl_row)
+        from PyQt6.QtGui import QFont as _QF
+        f = _QF("Consolas", 10)
+        self._time_lbl.setFont(f)
+        ctrl.addWidget(self._time_lbl)
+        root.addLayout(ctrl)
 
-        # Tabs: Timeline / Summary
+        self._btn_play.clicked.connect(self._play)
+        self._btn_pause.clicked.connect(self._pause)
+        self._btn_stop.clicked.connect(self._stop)
+
+        # Frame timer — advance video at playback FPS
+        self._frame_timer = _QT(self)
+        self._frame_timer.timeout.connect(self._next_frame)
+
+        # ── Tabs ─────────────────────────────────────────────────────────
         self._tabs = QTabWidget()
         self._tabs.setObjectName("PlaybackTabs")
 
-        # Timeline tab
-        tl_widget = QWidget()
-        tl_lay = QVBoxLayout(tl_widget)
-        tl_lay.setContentsMargins(4, 8, 4, 4)
+        tl_w = QWidget()
+        tl_l = QVBoxLayout(tl_w)
+        tl_l.setContentsMargins(4, 8, 4, 4)
         self._timeline = PlaybackTimelineWidget()
-        tl_lay.addWidget(self._timeline)
-        tl_lay.addStretch()
-        self._tabs.addTab(tl_widget, "Timeline")
+        tl_l.addWidget(self._timeline)
+        tl_l.addStretch()
+        self._tabs.addTab(tl_w, "Timeline")
 
-        # Summary tab
-        self._summary_widget = QWidget()
-        sum_lay = QVBoxLayout(self._summary_widget)
-        sum_lay.setContentsMargins(8, 8, 8, 4)
-        self._summary_lbl = QLabel("Select an experiment to view summary.")
+        sum_w = QWidget()
+        sum_l = QVBoxLayout(sum_w)
+        sum_l.setContentsMargins(8, 8, 8, 4)
+        self._summary_lbl = QLabel("Select an experiment.")
         self._summary_lbl.setObjectName("SummaryText")
         self._summary_lbl.setWordWrap(True)
-        sum_lay.addWidget(self._summary_lbl)
-        sum_lay.addStretch()
-        self._tabs.addTab(self._summary_widget, "Summary")
+        sum_l.addWidget(self._summary_lbl)
+        sum_l.addStretch()
+        self._tabs.addTab(sum_w, "Summary")
 
         root.addWidget(self._tabs, 2)
 
+    # ── Video file loading ────────────────────────────────────────────────────
+
     def load_experiment(self, exp: dict) -> None:
-        """Update playback panel with selected experiment."""
+        self._stop()
         dur = exp.get("duration_sec") or 0
+        name   = exp.get("name", "—")
+        status = (exp.get("status") or "—").capitalize()
+        proto  = exp.get("protocol_name") or "—"
+        date_str, time_str, _ = _fmt_timestamp(exp.get("started", 0))
+
+        # Find video file
+        path = exp.get("storage_path") or ""
+        video_file = self._find_video(path)
+        if video_file:
+            self._load_video(video_file)
+        else:
+            self._video_lbl.setText(
+                f"[{status}]  {name}\n{date_str}  {time_str}\n"
+                f"Protocol: {proto}\n\nNo video file found.")
+            self._set_controls_enabled(False)
+
         self._time_lbl.setText(f"00:00 / {_fmt_duration(dur)}")
 
-        name = exp.get("name", "—")
-        status = (exp.get("status") or "—").capitalize()
-        proto = exp.get("protocol_name") or "—"
-        date_str, time_str, _ = _fmt_timestamp(exp.get("started", 0))
-        self._video_area.setText(
-            f"[{status}]  {name}\n{date_str}  {time_str}\nProtocol: {proto}"
-        )
+        # Timeline
+        events = exp.get("events_log") or []
+        if events:
+            self._timeline.set_events(events, dur)
 
         # Summary
-        dur_str = _fmt_duration(exp.get("duration_sec"))
-        fps = exp.get("fps") or "—"
         self._summary_lbl.setText(
-            f"Experiment: {name}\n"
-            f"Status: {status}\n"
-            f"Protocol: {proto}\n"
-            f"Duration: {dur_str}\n"
+            f"Experiment: {name}\nStatus: {status}\n"
+            f"Protocol: {proto}\nDuration: {_fmt_duration(dur)}\n"
             f"Date: {date_str} {time_str}"
         )
+
+    def _find_video(self, path: str) -> str:
+        """Return .mp4 path or empty string."""
+        if os.path.isfile(path) and path.lower().endswith((".mp4", ".avi", ".mov")):
+            return path
+        if os.path.isdir(path):
+            for f in os.listdir(path):
+                if f.lower().endswith((".mp4", ".avi", ".mov")):
+                    return os.path.join(path, f)
+        return ""
+
+    def _load_video(self, path: str) -> None:
+        import cv2
+        if self._cap:
+            self._cap.release()
+        self._cap = cv2.VideoCapture(path)
+        if not self._cap.isOpened():
+            self._video_lbl.setText("Cannot open video file.")
+            self._set_controls_enabled(False)
+            return
+        self._total_frames = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self._fps_video    = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self._current_frame = 0
+        self._video_path = path
+        self._scrub.setRange(0, max(1, self._total_frames - 1))
+        self._scrub.setValue(0)
+        self._set_controls_enabled(True)
+        self._show_frame(0)
+
+    def _show_frame(self, frame_idx: int) -> None:
+        if not self._cap or not self._cap.isOpened():
+            return
+        import cv2
+        from PyQt6.QtGui import QImage, QPixmap
+        self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ret, frame = self._cap.read()
+        if not ret:
+            return
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        img = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888).copy()
+        pix = QPixmap.fromImage(img).scaled(
+            self._video_lbl.width(), self._video_lbl.height(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._video_lbl.setPixmap(pix)
+        elapsed = frame_idx / self._fps_video
+        total   = self._total_frames / self._fps_video
+        self._time_lbl.setText(f"{_fmt_duration(elapsed)} / {_fmt_duration(total)}")
+        self._scrub.blockSignals(True)
+        self._scrub.setValue(frame_idx)
+        self._scrub.blockSignals(False)
+
+    # ── Transport ─────────────────────────────────────────────────────────────
+
+    def _play(self) -> None:
+        if not self._cap:
+            return
+        self._playing = True
+        interval_ms = max(1, int(1000 / self._fps_video))
+        self._frame_timer.start(interval_ms)
+
+    def _pause(self) -> None:
+        self._playing = False
+        self._frame_timer.stop()
+
+    def _stop(self) -> None:
+        self._pause()
+        self._current_frame = 0
+        if self._cap:
+            self._show_frame(0)
+
+    def _next_frame(self) -> None:
+        if not self._playing or not self._cap:
+            return
+        self._current_frame += 1
+        if self._current_frame >= self._total_frames:
+            self._pause()
+            self._current_frame = 0
+            return
+        self._show_frame(self._current_frame)
+
+    # ── Scrub slider ──────────────────────────────────────────────────────────
+
+    def _on_scrub_press(self) -> None:
+        self._frame_timer.stop()
+
+    def _on_scrub_release(self) -> None:
+        self._current_frame = self._scrub.value()
+        self._show_frame(self._current_frame)
+        if self._playing:
+            self._frame_timer.start(max(1, int(1000 / self._fps_video)))
+
+    def _on_scrub_move(self, val: int) -> None:
+        self._show_frame(val)
+
+    def _set_controls_enabled(self, enabled: bool) -> None:
+        self._scrub.setEnabled(enabled)
+        for btn in (self._btn_play, self._btn_pause, self._btn_stop):
+            btn.setEnabled(enabled)
 
 
 # ── Right panel: experiment details ──────────────────────────────────────────

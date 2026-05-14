@@ -818,8 +818,8 @@ def test_f11_settings():
     # Set a recording path and save
     try:
         tmp_rec = tempfile.mkdtemp()
-        page._recording_path.setText(tmp_rec)
-        page._save_settings()
+        page._output_folder_edit.setText(tmp_rec)
+        page._save()   # actual method is _save(), not _save_settings()
         if _FakeBridge._saved_settings:
             ok("F11.3 Save settings calls bridge.save_settings()",
                f"keys saved: {list(_FakeBridge._saved_settings.keys())}")

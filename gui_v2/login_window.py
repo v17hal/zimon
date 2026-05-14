@@ -45,7 +45,7 @@ def _save_prefs(prefs: dict) -> None:
 class LoginWindow(QWidget):
     """Shown before MainWindow; emits login_success(user_dict) on success."""
 
-    login_success = pyqtSignal(dict)
+    login_success = pyqtSignal(dict, object)  # (user_dict, session_token_or_None)
 
     def __init__(self) -> None:
         super().__init__()
@@ -218,13 +218,20 @@ class LoginWindow(QWidget):
         self._btn_login.setText("Login  →")
 
         if user:
-            # Save Remember Me preference
+            token = None
+            if self._remember.isChecked():
+                try:
+                    from db.database import create_session
+                    token = create_session(user["id"], days=30)
+                except Exception:
+                    pass
             _save_prefs({
                 "remember_me": self._remember.isChecked(),
                 "username": email if self._remember.isChecked() else "",
+                "session_token": token or "",
             })
             self._err.hide()
-            self.login_success.emit(user)
+            self.login_success.emit(user, token)
         else:
             self._show_error("Incorrect email/username or password.")
 

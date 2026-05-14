@@ -69,6 +69,13 @@ def init_db() -> None:
                 started       REAL NOT NULL,
                 finished      REAL
             );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token      TEXT PRIMARY KEY,
+                user_id    INTEGER NOT NULL,
+                created    REAL NOT NULL,
+                expires    REAL NOT NULL
+            );
         """)
         # Seed admin user on first run
         row = conn.execute("SELECT id FROM users WHERE role='admin' LIMIT 1").fetchone()
@@ -100,6 +107,15 @@ def login(email_or_username: str, password: str) -> Optional[dict]:
         if row and row["password"] == _hash(password):
             return dict(row)
         return None
+
+
+def is_default_password(user_id: int) -> bool:
+    """Returns True if the user still has the default password 'zimon2024'."""
+    with _get_conn() as conn:
+        row = conn.execute("SELECT password FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row:
+            return False
+        return row["password"] == _hash("zimon2024")
 
 
 # ── User management (admin only) ─────────────────────────────────────────────
@@ -138,6 +154,45 @@ def delete_user(uid: int) -> bool:
     with _get_conn() as conn:
         conn.execute("UPDATE users SET active=0 WHERE id=?", (uid,))
     return True
+
+
+# ── Sessions ──────────────────────────────────────────────────────────────────
+
+def create_session(user_id: int, days: int = 30) -> str:
+    """Create a persistent login session token valid for *days* days."""
+    import secrets
+    token = secrets.token_hex(32)
+    now = time.time()
+    expires = now + days * 86400
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO sessions (token, user_id, created, expires) VALUES (?,?,?,?)",
+            (token, user_id, now, expires),
+        )
+    return token
+
+
+def validate_session(token: str) -> Optional[dict]:
+    """Returns user dict if session is valid and not expired, else None."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT s.user_id, s.expires FROM sessions s WHERE s.token=?", (token,)
+        ).fetchone()
+        if not row:
+            return None
+        if time.time() > row["expires"]:
+            conn.execute("DELETE FROM sessions WHERE token=?", (token,))
+            return None
+        user = conn.execute(
+            "SELECT * FROM users WHERE id=? AND active=1", (row["user_id"],)
+        ).fetchone()
+        return dict(user) if user else None
+
+
+def delete_session(token: str) -> None:
+    """Invalidate a session token (called on logout)."""
+    with _get_conn() as conn:
+        conn.execute("DELETE FROM sessions WHERE token=?", (token,))
 
 
 # ── Protocols ─────────────────────────────────────────────────────────────────
